@@ -1,6 +1,8 @@
+"""The src module containing everything necessary to run the project."""
+
 from .model import FunctionDefinition, ReturnType, FunctionCallresult
 from .model import PromptEntry
-
+from .loader import function_loader, prompt_loader
 
 __all__ = ["FunctionCallresult", "FunctionDefinition",
-           "ReturnType", "PromptEntry"]
+           "ReturnType", "PromptEntry", "function_loader", "prompt_loader"]

@@ -1,4 +1,4 @@
-"""Contains the model for prompst, return types and parametres."""
+"""Contains the model for prompt, return types and parametres."""
 
 from pydantic import BaseModel
 from typing import Literal
