@@ -45,23 +45,28 @@ def prompt_loader(filepath: str) -> list[PromptEntry]:
     return result
 
 
-# from llm_sdk import Small_LLM_Model
-# import torch
+def build_prompt(
+    functions: list[FunctionDefinition],
+    prompts: str,
+) -> str:
+    function_lines = []
 
+    for function in functions:
+        parameters = ", ".join(
+            f"{name}: {parameter.type}"
+            for name, parameter in function.parameters.items()
+        )
+        function_lines.append(
+            f"- {function.name}({parameters}): {function.description}"
+        )
 
-# model = Small_LLM_Model()
+    function_tab = "\n".join(function_lines)
 
-# input_ids = model.encode("Quel temps fait-il à Paris ?")
-# generated_ids = input_ids[0].tolist()
-
-# max_new_tokens = 50
-
-# for _ in range(max_new_tokens):
-#     logits = model.get_logits_from_input_ids(generated_ids)
-#     next_token_id = torch.tensor(logits).argmax().item()
-#     generated_ids.append(next_token_id)
-#     if next_token_id == model._tokenizer.eos_token_id:
-#         break
-
-# result_text = model.decode(generated_ids)
-# print(result_text)
+    return (
+        "You are a function-calling assistant. Given a user request, "
+        "respond ONLY with a JSON object in the format "
+        '{"name": "<function_name>", "parameters": {...}}\n\n'
+        f"Available functions:\n{function_tab}\n\n"
+        f"User request: {prompts}\n"
+        "JSON response:"
+    )
