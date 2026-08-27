@@ -1,6 +1,7 @@
 .PHONY: install run debug clean lint lint-strict
 
 export UV_CACHE_DIR := /goinfre/$(USER)/.cache/uv
+export HF_HOME := /goinfre/$(USER)/.cache/huggingface
 
 install:
 	uv sync

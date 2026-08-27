@@ -2,7 +2,8 @@
 
 from .model import FunctionDefinition, ReturnType, FunctionCallresult
 from .model import PromptEntry
-from .loader import function_loader, prompt_loader
+from .loader import function_loader, prompt_loader, build_prompt
 
 __all__ = ["FunctionCallresult", "FunctionDefinition",
-           "ReturnType", "PromptEntry", "function_loader", "prompt_loader"]
+           "ReturnType", "PromptEntry", "function_loader", "prompt_loader",
+           "build_prompt"]

@@ -9,6 +9,7 @@ import sys
 
 def function_loader(filepath: str) -> list[FunctionDefinition]:
     """Load and validate function definitions from a JSON file."""
+    result: list[FunctionDefinition] = []
     try:
         with open(filepath, "r") as f:
             res = json.load(f)
@@ -20,6 +21,7 @@ def function_loader(filepath: str) -> list[FunctionDefinition]:
     except pydantic.ValidationError as error:
         print(f"Functions validation error: {error}")
         return result
+    return result
 
 
 def prompt_loader(filepath: str) -> list[PromptEntry]:
@@ -49,6 +51,11 @@ def build_prompt(
     functions: list[FunctionDefinition],
     prompts: str,
 ) -> str:
+    """Build a formatted prompt for a function-calling assistant.
+
+    Constructs a prompt string that includes available function definitions
+    and the user request, formatted for JSON function-call response generation.
+    """
     function_lines = []
 
     for function in functions:
