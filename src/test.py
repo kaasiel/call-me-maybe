@@ -1,15 +1,12 @@
+import json
 from enum import Enum, auto
-
-from src import build_prompt, FunctionDefinition
+from src import FunctionDefinition, build_prompt, FunctionCallresult
 
 
 def filter_logits(logits, allowed_tokens):
-    """Filter the tokens to keep only allowed tokens."""
     filtered = [float("-inf")] * len(logits)
-
     for token_id in allowed_tokens:
         filtered[token_id] = logits[token_id]
-
     return filtered
 
 
@@ -21,227 +18,132 @@ class State(Enum):
     END = auto()
 
 
-class FiniteState:
-    def __init__(
-        self,
-        model,
-        prompt: str,
-        functions: list[FunctionDefinition],
-    ):
+class JSONenforce:
+    def __init__(self, model, prompt: str, functions: list[FunctionDefinition]):
         self.model = model
         self.state = State.START
         self.prompt = prompt
         self.functions = functions
+        self.res = []
+        self.input_ids = []
+        self.chosen_func = None
 
-        self.generated_ids = self.get_generated_ids(
-            prompt,
-            functions,
-        )
-
-        self.res: list[int] = []
-        self.chosen_function = None
-
-    def get_generated_ids(
-        self,
-        prompt: str,
-        functions: list[FunctionDefinition],
-    ) -> list[int]:
-        """Return the input token IDs."""
         to_send = build_prompt(functions, prompt)
-        input_ids = self.model.encode(to_send)
+        self.input_ids = self.model.encode(to_send).tolist()[0]
 
-        return input_ids[0].tolist()
-
-    def _generate_fixed_text(self, text: str):
-        """Add a fixed piece of text to the generated result."""
+    def tokeniser(self, text: str) -> None:
         ids = self.model.encode(text).tolist()[0]
-
-        self.generated_ids.extend(ids)
+        self.input_ids.extend(ids)
         self.res.extend(ids)
 
-    def _generate_value(self, param_type: str):
-        """Generate a parameter value according to its type."""
-
-        if param_type == "number":
-            allowed_chars = "0123456789.-"
-        else:
-            allowed_chars = None
-
-        while True:
-            logits = self.model.get_logits_from_input_ids(
-                self.generated_ids
-            )
-
-            if allowed_chars is not None:
-                allowed_ids = set()
-
-                for char in allowed_chars:
-                    ids = self.model.encode(char).tolist()[0]
-                    allowed_ids.update(ids)
-
-                # Allow the end of the value
-                for char in [",", "}"]:
-                    ids = self.model.encode(char).tolist()[0]
-                    allowed_ids.update(ids)
-
-            else:
-                # For strings, don't restrict the content yet.
-                allowed_ids = set(range(len(logits)))
-
-            masked_logits = filter_logits(
-                logits,
-                allowed_ids,
-            )
-
-            next_token_id = masked_logits.index(
-                max(masked_logits)
-            )
-
-            self.generated_ids.append(next_token_id)
-            self.res.append(next_token_id)
-
-            decoded = self.model.decode([next_token_id])
-
-            if param_type == "number":
-                if decoded in (",", "}"):
-                    break
-
-            else:
-                if decoded == '"':
-                    break
-
-    def text_modelisation(self):
-        """Generate the JSON according to the FSM."""
-
-        # ----------------
-        # START
-        # ----------------
+    def output_modelisation(self):
+        # START → PROMPT
         if self.state == State.START:
-            self._generate_fixed_text('{"prompt": "')
+            self.tokeniser('{"prompt": "')
             self.state = State.PROMPT
 
-        # ----------------
-        # PROMPT
-        # ----------------
+        # PROMPT → NAME
         if self.state == State.PROMPT:
-            self._generate_fixed_text(self.prompt)
-            self._generate_fixed_text('", "name": "')
-
+            self.tokeniser(self.prompt)
+            self.tokeniser('", "name": "')
             self.state = State.NAME
 
-        # ----------------
-        # NAME
-        # ----------------
+        # NAME → PARAMETERS
         if self.state == State.NAME:
-
-            function_names = [
-                function.name
-                for function in self.functions
-            ]
-
-            name_ids_options = [
-                self.model.encode(name).tolist()[0]
-                for name in function_names
-            ]
+            function_names = [fn.name for fn in self.functions]
+            name_ids = [self.model.encode(name).tolist()[0] for name in function_names]
 
             chosen = []
-
             while True:
-                candidates = [
-                    ids
-                    for ids in name_ids_options
-                    if ids[:len(chosen)] == chosen
-                ]
+                candidates = [ids for ids in name_ids if ids[:len(chosen)] == chosen]
 
                 if not candidates:
-                    raise ValueError(
-                        "No valid function name found."
-                    )
+                    raise ValueError("No valid function name")
 
-                # One function remains
                 if len(candidates) == 1:
-                    remaining = candidates[0][len(chosen):]
+                    rest = candidates[0][len(chosen):]
+                    self.input_ids.extend(rest)
+                    self.res.extend(rest)
 
-                    self.generated_ids.extend(remaining)
-                    self.res.extend(remaining)
+                    chosen_index = name_ids.index(candidates[0])
+                    self.chosen_func = self.functions[chosen_index]
 
-                    chosen_index = name_ids_options.index(
-                        candidates[0]
-                    )
-
-                    self.chosen_function = (
-                        self.functions[chosen_index]
-                    )
-
+                    self.tokeniser('", "parameters": {')
+                    self.state = State.PARAMETERS
                     break
 
-                allowed = {
-                    ids[len(chosen)]
-                    for ids in candidates
-                }
-
-                logits = self.model.get_logits_from_input_ids(
-                    self.generated_ids
-                )
-
-                masked_logits = filter_logits(
-                    logits,
-                    allowed,
-                )
-
-                next_token_id = masked_logits.index(
-                    max(masked_logits)
-                )
+                allowed = {ids[len(chosen)] for ids in candidates}
+                logits = self.model.get_logits_from_input_ids(self.input_ids)
+                masked_logits = filter_logits(logits, allowed)
+                next_token_id = masked_logits.index(max(masked_logits))
 
                 chosen.append(next_token_id)
+                self.input_ids.append(next_token_id)
+                self.res.append(next_token_id)
 
-                self.generated_ids.append(
-                    next_token_id
-                )
-
-                self.res.append(
-                    next_token_id
-                )
-
-            self._generate_fixed_text(
-                '", "parameters": {'
-            )
-
-            self.state = State.PARAMETERS
-
-        # ----------------
-        # PARAMETERS
-        # ----------------
+        # PARAMETERS → END
         if self.state == State.PARAMETERS:
+            param_items = list(self.chosen_func.parameters.items())
 
-            param_items = list(
-                self.chosen_function.parameters.items()
-            )
-
-            for i, (param_name, param) in enumerate(
-                param_items
-            ):
+            for i, (param_name, param) in enumerate(param_items):
                 key_text = f'"{param_name}": '
+                self.tokeniser(key_text)
 
-                # String parameter needs opening quote
                 if param.type == "string":
-                    key_text += '"'
+                    self.tokeniser('"')
+                    terminator = ['"']
+                    allowed_char = None
+                elif param.type == "number":
+                    allowed_char = "0123456789.-"
+                    terminator = [",", "}"]
+                else:
+                    allowed_char = "true, false, TRUE, FALSE"
+                    terminator = [",", "}"]
 
-                self._generate_fixed_text(key_text)
+                while True:
+                    logits = self.model.get_logits_from_input_ids(self.input_ids)
 
-                self._generate_value(param.type)
+                    if allowed_char is not None:
+                        allowed_ids = set()
+                        for char in allowed_char:
+                            ids = self.model.encode(char).tolist()[0]
+                            allowed_ids.update(ids)
+                        for char in terminator:
+                            ids = self.model.encode(char).tolist()[0]
+                            allowed_ids.update(ids)
+                    else:
+                        allowed_ids = set(range(len(logits)))
+
+                    masked_logits = filter_logits(logits, allowed_ids)
+                    next_token_id = masked_logits.index(max(masked_logits))
+                    decoded = self.model.decode([next_token_id])
+
+                    if decoded in terminator:
+                        # Terminator only signals "stop" — the real
+                        # punctuation is added by the surrounding code,
+                        # so we don't commit this token to the output.
+                        if param.type == "string":
+                            self.tokeniser('"')
+                        break
+
+                    self.input_ids.append(next_token_id)
+                    self.res.append(next_token_id)
 
                 if i < len(param_items) - 1:
-                    self._generate_fixed_text(", ")
+                    self.tokeniser(", ")
 
-            self._generate_fixed_text("}")
-
+            self.tokeniser("}")
             self.state = State.END
 
-        # ----------------
-        # END
-        # ----------------
+        # PARAMETERS → END (close the outer object)
         if self.state == State.END:
-            self._generate_fixed_text("}")
+            self.tokeniser("}")
 
-        return self.res
+        decoded = self.model.decode(self.res)
+
+        try:
+            data = json.loads(decoded)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Json invalide: {decoded}") from e
+
+        return FunctionCallresult(**data)
