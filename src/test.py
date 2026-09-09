@@ -10,6 +10,10 @@ def filter_logits(logits, allowed_tokens):
     return filtered
 
 
+def quote_counter(text: str) -> bool:
+    return text.count('"') % 2 == 1
+
+
 class State(Enum):
     START = auto()
     PROMPT = auto()
@@ -19,13 +23,19 @@ class State(Enum):
 
 
 class JSONenforce:
-    def __init__(self, model, prompt: str, functions: list[FunctionDefinition]):
+    MAX_STRING_TOKENS = 200
+    MAX_NUMBER_TOKENS = 40
+
+    def __init__(self,
+                 model,
+                 prompt: str,
+                 functions: list[FunctionDefinition]):
         self.model = model
         self.state = State.START
         self.prompt = prompt
         self.functions = functions
-        self.res = []
-        self.input_ids = []
+        self.res: list[int] = []
+        self.input_ids: list[int] = []
         self.chosen_func = None
 
         to_send = build_prompt(functions, prompt)
@@ -36,6 +46,90 @@ class JSONenforce:
         self.input_ids.extend(ids)
         self.res.extend(ids)
 
+    def _walk_fixed_choices(self, choices: list[str]) -> str:
+        choice_ids = [self.model.encode(c).tolist()[0] for c in choices]
+        chosen = []
+        while True:
+            candidates = [
+                ids for ids in choice_ids
+                if ids[:len(chosen)] == chosen
+                ]
+
+            if not candidates:
+                raise ValueError(f"No valid choice among {choices}")
+            if len(candidates) == 1:
+                rest = candidates[0][len(chosen):]
+                self.input_ids.extend(rest)
+                self.res.extend(rest)
+                return choices[choice_ids.index(candidates[0])]
+            allowed = {ids[len(chosen)] for ids in candidates}
+            logits = self.model.get_logits_from_input_ids(self.input_ids)
+            masked_logits = filter_logits(logits, allowed)
+            next_token_id = masked_logits.index(max(masked_logits))
+            chosen.append(next_token_id)
+            self.input_ids.append(next_token_id)
+            self.res.append(next_token_id)
+
+    def _generate_string(self, param_name: str) -> None:
+        self.tokeniser('"')
+        temporary = []
+        ended = False
+
+        for _ in range(self.MAX_STRING_TOKENS):
+            logits = self.model.get_logits_from_input_ids(self.input_ids)
+            next_token_id = max(range(len(logits)), key=lambda i: logits[i])
+
+            temporary.append(next_token_id)
+            decoded_so_far = self.model.decode(temporary)
+
+            if quote_counter(decoded_so_far):
+                # Closing quote found — don't commit it, we add the
+                # real one ourselves below.
+                temporary.pop()
+                ended = True
+                break
+
+            self.input_ids.append(next_token_id)
+            self.res.append(next_token_id)
+
+        if not ended:
+            print(
+                f"[warn] string param '{param_name}' "
+                f"truncated at {self.MAX_STRING_TOKENS} tokens"
+            )
+
+        # Always close the string, whether it ended naturally or was
+        # truncated — this was the bug that broke every string param.
+        self.tokeniser('"')
+
+    def _generate_number(self, param_name: str) -> None:
+        allowed_char = "0123456789.-"
+        terminator = [",", "}"]
+        iters = 0
+
+        while True:
+            iters += 1
+            if iters > self.MAX_NUMBER_TOKENS:
+                raise ValueError(
+                    f"Number param '{param_name}' did not terminate")
+
+            logits = self.model.get_logits_from_input_ids(self.input_ids)
+            allowed_ids = set()
+            for char in allowed_char + "".join(terminator):
+                allowed_ids.update(self.model.encode(char).tolist()[0])
+
+            masked_logits = filter_logits(logits, allowed_ids)
+            next_token_id = masked_logits.index(max(masked_logits))
+            decoded = self.model.decode([next_token_id])
+
+            if decoded in terminator:
+                # Terminator only signals "stop" — NOT committed here,
+                # the surrounding code supplies the real ", "/"}"/etc.
+                break
+
+            self.input_ids.append(next_token_id)
+            self.res.append(next_token_id)
+
     def output_modelisation(self):
         # START → PROMPT
         if self.state == State.START:
@@ -44,42 +138,19 @@ class JSONenforce:
 
         # PROMPT → NAME
         if self.state == State.PROMPT:
-            self.tokeniser(self.prompt)
+            escaped_prompt = json.dumps(self.prompt)[1:-1]
+            self.tokeniser(escaped_prompt)
             self.tokeniser('", "name": "')
             self.state = State.NAME
 
         # NAME → PARAMETERS
         if self.state == State.NAME:
             function_names = [fn.name for fn in self.functions]
-            name_ids = [self.model.encode(name).tolist()[0] for name in function_names]
-
-            chosen = []
-            while True:
-                candidates = [ids for ids in name_ids if ids[:len(chosen)] == chosen]
-
-                if not candidates:
-                    raise ValueError("No valid function name")
-
-                if len(candidates) == 1:
-                    rest = candidates[0][len(chosen):]
-                    self.input_ids.extend(rest)
-                    self.res.extend(rest)
-
-                    chosen_index = name_ids.index(candidates[0])
-                    self.chosen_func = self.functions[chosen_index]
-
-                    self.tokeniser('", "parameters": {')
-                    self.state = State.PARAMETERS
-                    break
-
-                allowed = {ids[len(chosen)] for ids in candidates}
-                logits = self.model.get_logits_from_input_ids(self.input_ids)
-                masked_logits = filter_logits(logits, allowed)
-                next_token_id = masked_logits.index(max(masked_logits))
-
-                chosen.append(next_token_id)
-                self.input_ids.append(next_token_id)
-                self.res.append(next_token_id)
+            chosen_name = self._walk_fixed_choices(function_names)
+            self.chosen_func = self.functions[
+                function_names.index(chosen_name)]
+            self.tokeniser('", "parameters": {')
+            self.state = State.PARAMETERS
 
         # PARAMETERS → END
         if self.state == State.PARAMETERS:
@@ -90,44 +161,14 @@ class JSONenforce:
                 self.tokeniser(key_text)
 
                 if param.type == "string":
-                    self.tokeniser('"')
-                    terminator = ['"']
-                    allowed_char = None
+                    self._generate_string(param_name)
                 elif param.type == "number":
-                    allowed_char = "0123456789.-"
-                    terminator = [",", "}"]
+                    self._generate_number(param_name)
+                elif param.type == "boolean":
+                    self._walk_fixed_choices(["true", "false"])
                 else:
-                    allowed_char = "true, false, TRUE, FALSE"
-                    terminator = [",", "}"]
-
-                while True:
-                    logits = self.model.get_logits_from_input_ids(self.input_ids)
-
-                    if allowed_char is not None:
-                        allowed_ids = set()
-                        for char in allowed_char:
-                            ids = self.model.encode(char).tolist()[0]
-                            allowed_ids.update(ids)
-                        for char in terminator:
-                            ids = self.model.encode(char).tolist()[0]
-                            allowed_ids.update(ids)
-                    else:
-                        allowed_ids = set(range(len(logits)))
-
-                    masked_logits = filter_logits(logits, allowed_ids)
-                    next_token_id = masked_logits.index(max(masked_logits))
-                    decoded = self.model.decode([next_token_id])
-
-                    if decoded in terminator:
-                        # Terminator only signals "stop" — the real
-                        # punctuation is added by the surrounding code,
-                        # so we don't commit this token to the output.
-                        if param.type == "string":
-                            self.tokeniser('"')
-                        break
-
-                    self.input_ids.append(next_token_id)
-                    self.res.append(next_token_id)
+                    raise NotImplementedError(
+                        f"Unsupported param type: {param.type}")
 
                 if i < len(param_items) - 1:
                     self.tokeniser(", ")
@@ -135,7 +176,6 @@ class JSONenforce:
             self.tokeniser("}")
             self.state = State.END
 
-        # PARAMETERS → END (close the outer object)
         if self.state == State.END:
             self.tokeniser("}")
 
