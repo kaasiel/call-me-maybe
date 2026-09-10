@@ -5,7 +5,7 @@ import argparse
 from typing import Any
 from functools import wraps
 from time import perf_counter
-from llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from collections.abc import Callable
 from src import JSONenforce, header_printer
 from src import function_loader, prompt_loader, FunctionCallresult

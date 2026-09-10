@@ -2,10 +2,15 @@
 
 import json
 from enum import Enum, auto
+from collections.abc import Iterable
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from src import FunctionDefinition, build_prompt, FunctionCallresult
 
 
-def filter_logits(logits, allowed_tokens):
+def filter_logits(
+        logits: list[int],
+        allowed_tokens: Iterable[int]
+        ) -> list[float]:
     """Retain only the logits for the allowed token IDs."""
     filtered = [float("-inf")] * len(logits)
     for token_id in allowed_tokens:
@@ -37,17 +42,17 @@ class JSONenforce:
     MAX_NUMBER_TOKENS = 40
 
     def __init__(self,
-                 model,
+                 model: Small_LLM_Model,
                  prompt: str,
-                 functions: list[FunctionDefinition]):
+                 functions: list[FunctionDefinition]) -> None:
         """Init the variable that will be used."""
         self.model = model
         self.state = State.START
         self.prompt = prompt
-        self.functions = functions
+        self.functions: list[FunctionDefinition] = functions
         self.res: list[int] = []
         self.input_ids: list[int] = []
-        self.chosen_func = None
+        self.chosen_func: FunctionDefinition | None = None
 
         to_send = build_prompt(functions, prompt)
         self.input_ids = self.model.encode(to_send).tolist()[0]
@@ -146,7 +151,7 @@ class JSONenforce:
             self.input_ids.append(next_token_id)
             self.res.append(next_token_id)
 
-    def output_modelisation(self):
+    def output_modelisation(self) -> FunctionCallresult:
         """Force th eoutput to be a avlid JSON."""
         if self.state == State.START:
             self.tokeniser('{"prompt": "')
@@ -167,6 +172,8 @@ class JSONenforce:
             self.state = State.PARAMETERS
 
         if self.state == State.PARAMETERS:
+            if self.chosen_func is None:
+                raise ValueError("No function has been chosen yet")
             param_items = list(self.chosen_func.parameters.items())
 
             for i, (param_name, param) in enumerate(param_items):

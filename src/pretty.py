@@ -1,13 +1,13 @@
 """This module makes the output pretiier and fix the parameter."""
 import json
-
+from typing import Any
 RESET = "\033[0m"
 PROMPT = "\033[38;5;51m"
 FUNC_NAME = "\033[38;5;208m"
 PARAM = "\033[38;5;46m"
 
 
-def normalize_params(data: dict) -> dict:
+def normalize_params(data: dict[str, Any]) -> dict[str, Any]:
     """Convert int parameter values to float."""
     params = data["parameters"]
     for key, value in params.items():
@@ -16,7 +16,7 @@ def normalize_params(data: dict) -> dict:
     return data
 
 
-def print_pretty(to_use: dict) -> None:
+def print_pretty(to_use: dict[str, Any]) -> None:
     """Make the printing prettier by using ANSI colors."""
     print("\n{")
     print(f'  "prompt": {PROMPT}"{to_use["prompt"]}"{RESET},')
