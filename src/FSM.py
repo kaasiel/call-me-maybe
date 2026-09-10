@@ -40,6 +40,7 @@ class JSONenforce:
                  model,
                  prompt: str,
                  functions: list[FunctionDefinition]):
+        """Init the variable that will be used."""
         self.model = model
         self.state = State.START
         self.prompt = prompt
@@ -57,6 +58,7 @@ class JSONenforce:
             )
 
     def tokeniser(self, text: str) -> None:
+        """Transform a peace of text int logits."""
         ids = self.model.encode(text).tolist()[0]
         self.input_ids.extend(ids)
         self.res.extend(ids)
@@ -145,6 +147,7 @@ class JSONenforce:
             self.res.append(next_token_id)
 
     def output_modelisation(self):
+        """Force th eoutput to be a avlid JSON."""
         if self.state == State.START:
             self.tokeniser('{"prompt": "')
             self.state = State.PROMPT

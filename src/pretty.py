@@ -27,3 +27,18 @@ def print_pretty(to_use: dict) -> None:
     print(f'  "parameters": {PARAM}{indented}{RESET}')
 
     print("}")
+
+
+def header_printer() -> None:
+    """Print the header."""
+    lines = [
+        "▗▄▄▖ ▗▄▖ ▗▖   ▗▖       ▗▖  ▗▖▗▄▄▄▖    ▗▖  ▗▖ ▗▄▖▗▖  ▗▖▗▄▄▖ ▗▄▄▄▖",
+        "▐▌   ▐▌ ▐▌▐▌   ▐▌       ▐▛▚▞▜▌▐▌       ▐▛▚▞▜▌▐▌ ▐▌▝▚▞▘ ▐▌ ▐▌▐▌   ",
+        "▐▌   ▐▛▀▜▌▐▌   ▐▌       ▐▌  ▐▌▐▛▀▀▘    ▐▌  ▐▌▐▛▀▜▌ ▐▌  ▐▛▀▚▖▐▛▀▀▘",
+        "▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖▐▙▄▄▖    ▐▌  ▐▌▐▙▄▄▖    ▐▌  ▐▌▐▌ ▐▌ ▐▌  ▐▙▄▞▘▐▙▄▄▖",
+    ]
+
+    colors = [PROMPT, PROMPT, PARAM, PARAM]
+
+    for line, color in zip(lines, colors):
+        print(f"{color}{line.center(100)}{RESET}")

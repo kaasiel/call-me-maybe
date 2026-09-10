@@ -5,11 +5,11 @@ import argparse
 from typing import Any
 from functools import wraps
 from time import perf_counter
-from src import JSONenforce
 from llm_sdk import Small_LLM_Model
 from collections.abc import Callable
-from src import FunctionDefinition, print_pretty, normalize_params
+from src import JSONenforce, header_printer
 from src import function_loader, prompt_loader, FunctionCallresult
+from src import FunctionDefinition, print_pretty, normalize_params
 
 
 def args_parser() -> argparse.Namespace:
@@ -92,6 +92,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     try:
+        header_printer()
         main()
     except KeyboardInterrupt:
         print("\n Operation aborted")
