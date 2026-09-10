@@ -31,6 +31,8 @@ class State(Enum):
 class JSONenforce:
     """Enforce JSON parsing for model output."""
 
+    NUMBERS_CHAR = ".-0123456789"
+    A_TERMINATOR = [",", "}"]
     MAX_STRING_TOKENS = 200
     MAX_NUMBER_TOKENS = 40
 
@@ -48,6 +50,11 @@ class JSONenforce:
 
         to_send = build_prompt(functions, prompt)
         self.input_ids = self.model.encode(to_send).tolist()[0]
+        self._number_allowed_ids = set()
+        for char in self.NUMBERS_CHAR + "".join(self.A_TERMINATOR):
+            self._number_allowed_ids.update(
+                self.model.encode(char).tolist()[0]
+            )
 
     def tokeniser(self, text: str) -> None:
         ids = self.model.encode(text).tolist()[0]
@@ -90,6 +97,8 @@ class JSONenforce:
             temporary.append(next_token_id)
             decoded_so_far = self.model.decode(temporary)
 
+            print(f"\r  [{param_name}] generating: \"{decoded_so_far}\"",
+                  end="", flush=True)
             if quote_counter(decoded_so_far):
                 temporary.pop()
                 ended = True
@@ -97,6 +106,8 @@ class JSONenforce:
 
             self.input_ids.append(next_token_id)
             self.res.append(next_token_id)
+
+        print()
 
         if not ended:
             print(
@@ -107,8 +118,6 @@ class JSONenforce:
         self.tokeniser('"')
 
     def _generate_number(self, param_name: str) -> None:
-        allowed_char = "0123456789.-"
-        terminator = [",", "}"]
         iters = 0
 
         while True:
@@ -118,16 +127,19 @@ class JSONenforce:
                     f"Number param '{param_name}' did not terminate")
 
             logits = self.model.get_logits_from_input_ids(self.input_ids)
-            allowed_ids = set()
-            for char in allowed_char + "".join(terminator):
-                allowed_ids.update(self.model.encode(char).tolist()[0])
 
-            masked_logits = filter_logits(logits, allowed_ids)
+            masked_logits = filter_logits(
+                logits, self._number_allowed_ids
+            )
             next_token_id = masked_logits.index(max(masked_logits))
             decoded = self.model.decode([next_token_id])
 
-            if decoded in terminator:
+            print(f"\r  [{param_name}] generating: \"{decoded}\"",
+                  end="", flush=True)
+            if decoded in self.A_TERMINATOR:
                 break
+
+            print()
 
             self.input_ids.append(next_token_id)
             self.res.append(next_token_id)

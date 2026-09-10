@@ -18,7 +18,7 @@ def normalize_params(data: dict) -> dict:
 
 def print_pretty(to_use: dict) -> None:
     """Make the printing prettier by using ANSI colors."""
-    print("{")
+    print("\n{")
     print(f'  "prompt": {PROMPT}"{to_use["prompt"]}"{RESET},')
     print(f'  "name": {FUNC_NAME}"{to_use["name"]}"{RESET},')
 
