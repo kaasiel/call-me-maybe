@@ -1,16 +1,19 @@
+"""This lauches all th functons that runs the program."""
 import os
 import json
 import argparse
 from typing import Any
 from functools import wraps
 from time import perf_counter
-from src.test import JSONenforce
+from src import JSONenforce
 from llm_sdk import Small_LLM_Model
 from collections.abc import Callable
-from src import FunctionDefinition, print_pretty
+from src import FunctionDefinition, print_pretty, normalize_params
 from src import function_loader, prompt_loader, FunctionCallresult
 
+
 def args_parser() -> argparse.Namespace:
+    """Parse the arguments and set default values."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--functions_definitions",
@@ -28,6 +31,8 @@ def args_parser() -> argparse.Namespace:
     )
 
     return parser.parse_args()
+
+
 def spell_timer(func: Callable[..., Any]) -> Callable[..., Any]:
     """Timer warper used to time the function time."""
     @wraps(func)
@@ -36,8 +41,7 @@ def spell_timer(func: Callable[..., Any]) -> Callable[..., Any]:
         start = perf_counter()
         res = func(*args, **kwargs)
         end = perf_counter()
-        print(f"Spell completed in {end - start:.3f} seconds")
-        return res
+        return (res, end - start)
     return wrapper
 
 
@@ -64,13 +68,14 @@ def main() -> None:
             result_obj = jsonencode(model, prompt.prompt, functions)
             elapsed = perf_counter() - start
 
-            print_pretty(result_obj.model_dump_json())
+            data = normalize_params(result_obj.model_dump())
+            print_pretty(data)
 
             total_time += elapsed
-            result.append(json.loads(result_obj.model_dump_json()))
+            result.append(data)
 
         except Exception as e:
-            print(f"Erreur pour '{prompt.prompt}': {e}")
+            print(f"Error for '{prompt.prompt}': {e}")
             print("\n" + '*' * 10)
 
     print(f"\nTotal time for {len(prompts)} prompts: {total_time:.3f}s")

@@ -30,3 +30,5 @@ exclude = [".venv", "llm_sdk"]
 dev = [
     "flake8-pyproject>=1.2.4",
 ]
+[mypy-llm_sdk.*]
+ignore_missing_imports = True

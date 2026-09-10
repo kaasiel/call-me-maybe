@@ -1,26 +1,4 @@
-# import json
-
-# RESET = "\033[0m"
-
-# PROMPT = "\033[38;5;51m"
-# FUNC_NAME = "\033[38;5;208m"
-# PARAM = "\033[38;5;46m"
-# KEY = "\033[38;5;226m"
-
-
-# def print_pretty(text: str) -> None:
-#     to_use = json.loads(text)
-
-#     end = "}"
-#     start = "{"
-#     re = f"{PARAM}{start}{RESET}\n"
-#     re += f'  {PROMPT}"prompt{RESET}": {to_use["prompt"]},\n'
-#     re += f'  {FUNC_NAME}"name{RESET}": {to_use["name"]},\n'
-#     re += f'  {KEY}"parameters{RESET}": {json.dumps(to_use["parameters"])}\n'
-#     re += f"{PARAM}{end}{RESET}"
-
-#     print(re)
-
+"""This module makes the output pretiier and fix the parameter."""
 import json
 
 RESET = "\033[0m"
@@ -29,9 +7,17 @@ FUNC_NAME = "\033[38;5;208m"
 PARAM = "\033[38;5;46m"
 
 
-def print_pretty(text: str) -> None:
-    to_use = json.loads(text)
+def normalize_params(data: dict) -> dict:
+    """Convert int parameter values to float."""
+    params = data["parameters"]
+    for key, value in params.items():
+        if isinstance(value, int) and not isinstance(value, bool):
+            params[key] = float(value)
+    return data
 
+
+def print_pretty(to_use: dict) -> None:
+    """Make the printing prettier by using ANSI colors."""
     print("{")
     print(f'  "prompt": {PROMPT}"{to_use["prompt"]}"{RESET},')
     print(f'  "name": {FUNC_NAME}"{to_use["name"]}"{RESET},')

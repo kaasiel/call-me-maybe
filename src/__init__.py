@@ -3,8 +3,10 @@
 from .model import FunctionDefinition, ReturnType, FunctionCallresult
 from .model import PromptEntry
 from .loader import function_loader, prompt_loader, build_prompt
-from .pretty import print_pretty
+from .pretty import print_pretty, normalize_params
+from .FSM import JSONenforce
+
 
 __all__ = ["FunctionCallresult", "FunctionDefinition",
            "ReturnType", "PromptEntry", "function_loader", "prompt_loader",
-           "build_prompt", "print_pretty"]
+           "build_prompt", "print_pretty", "normalize_params", "JSONenforce"]

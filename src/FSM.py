@@ -1,9 +1,12 @@
+"""Finite-state JSON generation helpers for constrained function calls."""
+
 import json
 from enum import Enum, auto
 from src import FunctionDefinition, build_prompt, FunctionCallresult
 
 
 def filter_logits(logits, allowed_tokens):
+    """Retain only the logits for the allowed token IDs."""
     filtered = [float("-inf")] * len(logits)
     for token_id in allowed_tokens:
         filtered[token_id] = logits[token_id]
@@ -11,10 +14,13 @@ def filter_logits(logits, allowed_tokens):
 
 
 def quote_counter(text: str) -> bool:
+    """Return whether an odd number of quote marks has been seen."""
     return text.count('"') % 2 == 1
 
 
 class State(Enum):
+    """Manage the FSM states."""
+
     START = auto()
     PROMPT = auto()
     NAME = auto()
@@ -23,6 +29,8 @@ class State(Enum):
 
 
 class JSONenforce:
+    """Enforce JSON parsing for model output."""
+
     MAX_STRING_TOKENS = 200
     MAX_NUMBER_TOKENS = 40
 
@@ -48,7 +56,7 @@ class JSONenforce:
 
     def _walk_fixed_choices(self, choices: list[str]) -> str:
         choice_ids = [self.model.encode(c).tolist()[0] for c in choices]
-        chosen = []
+        chosen: list[int] = []
         while True:
             candidates = [
                 ids for ids in choice_ids
@@ -83,8 +91,6 @@ class JSONenforce:
             decoded_so_far = self.model.decode(temporary)
 
             if quote_counter(decoded_so_far):
-                # Closing quote found — don't commit it, we add the
-                # real one ourselves below.
                 temporary.pop()
                 ended = True
                 break
@@ -98,8 +104,6 @@ class JSONenforce:
                 f"truncated at {self.MAX_STRING_TOKENS} tokens"
             )
 
-        # Always close the string, whether it ended naturally or was
-        # truncated — this was the bug that broke every string param.
         self.tokeniser('"')
 
     def _generate_number(self, param_name: str) -> None:
@@ -123,27 +127,22 @@ class JSONenforce:
             decoded = self.model.decode([next_token_id])
 
             if decoded in terminator:
-                # Terminator only signals "stop" — NOT committed here,
-                # the surrounding code supplies the real ", "/"}"/etc.
                 break
 
             self.input_ids.append(next_token_id)
             self.res.append(next_token_id)
 
     def output_modelisation(self):
-        # START → PROMPT
         if self.state == State.START:
             self.tokeniser('{"prompt": "')
             self.state = State.PROMPT
 
-        # PROMPT → NAME
         if self.state == State.PROMPT:
             escaped_prompt = json.dumps(self.prompt)[1:-1]
             self.tokeniser(escaped_prompt)
             self.tokeniser('", "name": "')
             self.state = State.NAME
 
-        # NAME → PARAMETERS
         if self.state == State.NAME:
             function_names = [fn.name for fn in self.functions]
             chosen_name = self._walk_fixed_choices(function_names)
@@ -152,7 +151,6 @@ class JSONenforce:
             self.tokeniser('", "parameters": {')
             self.state = State.PARAMETERS
 
-        # PARAMETERS → END
         if self.state == State.PARAMETERS:
             param_items = list(self.chosen_func.parameters.items())
 
