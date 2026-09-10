@@ -167,7 +167,7 @@ class JSONenforce:
             param_items = list(self.chosen_func.parameters.items())
 
             for i, (param_name, param) in enumerate(param_items):
-                key_text = f'"{param_name}": '
+                key_text = f'"{param_name}":'
                 self.tokeniser(key_text)
 
                 if param.type == "string":
