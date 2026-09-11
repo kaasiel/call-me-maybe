@@ -36,10 +36,19 @@ class State(Enum):
 class JSONenforce:
     """Enforce JSON parsing for model output."""
 
-    NUMBERS_CHAR = ".-0123456789"
+    DIGIT_CHAR = "0123456789"
+    SIGN_CHAR = "-"
+    DECIMAL_CHAR = "."
     A_TERMINATOR = [",", "}"]
     MAX_STRING_TOKENS = 200
     MAX_NUMBER_TOKENS = 40
+
+    _TYPE_ALIASES = {
+        "string": "string", "str": "string", "text": "string",
+        "integer": "integer", "int": "integer", "long": "integer",
+        "number": "number", "float": "number", "double": "number",
+        "boolean": "boolean", "bool": "boolean",
+    }
 
     def __init__(self,
                  model: Small_LLM_Model,
@@ -56,11 +65,21 @@ class JSONenforce:
 
         to_send = build_prompt(functions, prompt)
         self.input_ids = self.model.encode(to_send).tolist()[0]
-        self._number_allowed_ids = set()
-        for char in self.NUMBERS_CHAR + "".join(self.A_TERMINATOR):
-            self._number_allowed_ids.update(
-                self.model.encode(char).tolist()[0]
-            )
+
+        terminator_chars = "".join(self.A_TERMINATOR)
+        self._integer_allowed_ids = self._char_ids(
+            self.DIGIT_CHAR + self.SIGN_CHAR + terminator_chars
+        )
+        self._number_allowed_ids = self._char_ids(
+            self.DIGIT_CHAR + self.SIGN_CHAR + self.DECIMAL_CHAR
+            + terminator_chars
+        )
+
+    def _char_ids(self, chars: str) -> set[int]:
+        ids: set[int] = set()
+        for char in chars:
+            ids.update(self.model.encode(char).tolist()[0])
+        return ids
 
     def tokeniser(self, text: str) -> None:
         """Transform a peace of text int logits."""
@@ -106,7 +125,7 @@ class JSONenforce:
             decoded_so_far = self.model.decode(temporary)
 
             print(f"\r  [{param_name}] generating: \"{decoded_so_far}\"\x1b[K",
-                end="", flush=True)
+                  end="", flush=True)
 
             if quote_counter(decoded_so_far):
                 new_text = decoded_so_far[len(prev_decoded):]
@@ -131,7 +150,12 @@ class JSONenforce:
 
         self.tokeniser('"')
 
-    def _generate_number(self, param_name: str) -> None:
+    def _generate_number(self, param_name: str, allow_decimal: bool) -> None:
+        """Generate a numeric literal."""
+        allowed_ids = (
+            self._number_allowed_ids if allow_decimal
+            else self._integer_allowed_ids
+        )
         iters = 0
 
         while True:
@@ -142,9 +166,7 @@ class JSONenforce:
 
             logits = self.model.get_logits_from_input_ids(self.input_ids)
 
-            masked_logits = filter_logits(
-                logits, self._number_allowed_ids
-            )
+            masked_logits = filter_logits(logits, allowed_ids)
             next_token_id = masked_logits.index(max(masked_logits))
             decoded = self.model.decode([next_token_id])
 
@@ -158,8 +180,39 @@ class JSONenforce:
             self.input_ids.append(next_token_id)
             self.res.append(next_token_id)
 
+    def _resolve_param_type(self, param_name: str, param_type: str) -> str:
+        """Normalize a declared type or guessing from the name."""
+        normalized = param_type.strip().lower()
+        if normalized in self._TYPE_ALIASES:
+            return self._TYPE_ALIASES[normalized]
+
+        guess = self._guess_type_from_name(param_name)
+        print(
+            f"[warn] unknown parameter type '{param_type}' for "
+            f"'{param_name}', guessing '{guess}' from its name"
+        )
+        return guess
+
+    @staticmethod
+    def _guess_type_from_name(param_name: str) -> str:
+        """Fallback heuristic when a parameter's declared type is unknown."""
+        pname = param_name.lower()
+        bool_hints = ("is_", "has_", "enable", "flag", "active")
+        int_hints = ("count", "num", "size", "index", "id", "age", "year")
+        float_hints = ("rate", "ratio", "price", "amount", "score", "percent")
+
+        if (
+            pname.startswith(("is", "has"))
+                or any(c in pname for c in bool_hints)):
+            return "boolean"
+        if any(c in pname for c in int_hints):
+            return "integer"
+        if any(c in pname for c in float_hints):
+            return "number"
+        return "string"
+
     def output_modelisation(self) -> FunctionCallresult:
-        """Force th eoutput to be a avlid JSON."""
+        """Force the output to be a valid JSON."""
         if self.state == State.START:
             self.tokeniser('{"prompt": "')
             self.state = State.PROMPT
@@ -187,15 +240,17 @@ class JSONenforce:
                 key_text = f'"{param_name}":'
                 self.tokeniser(key_text)
 
-                if param.type == "string":
+                resolved_type = self._resolve_param_type(
+                    param_name, param.type)
+
+                if resolved_type == "string":
                     self._generate_string(param_name)
-                elif param.type == "number":
-                    self._generate_number(param_name)
-                elif param.type == "boolean":
+                elif resolved_type == "integer":
+                    self._generate_number(param_name, allow_decimal=False)
+                elif resolved_type == "number":
+                    self._generate_number(param_name, allow_decimal=True)
+                elif resolved_type == "boolean":
                     self._walk_fixed_choices(["true", "false"])
-                else:
-                    raise NotImplementedError(
-                        f"Unsupported param type: {param.type}")
 
                 if i < len(param_items) - 1:
                     self.tokeniser(", ")
