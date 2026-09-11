@@ -68,7 +68,7 @@ def main() -> None:
             result_obj = jsonencode(model, prompt.prompt, functions)
             elapsed = perf_counter() - start
 
-            data = normalize_params(result_obj.model_dump())
+            data = normalize_params(result_obj.model_dump(), functions)
             print_pretty(data)
 
             total_time += elapsed
