@@ -218,7 +218,7 @@ class JSONenforce:
             self.state = State.PROMPT
 
         if self.state == State.PROMPT:
-            escaped_prompt = json.dumps(self.prompt)[1:-1]
+            escaped_prompt = json.dumps(self.prompt, ensure_ascii=False)[1:-1]
             self.tokeniser(escaped_prompt)
             self.tokeniser('", "name": "')
             self.state = State.NAME

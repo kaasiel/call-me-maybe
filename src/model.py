@@ -1,7 +1,8 @@
 """Contains the model for prompt, return types and parametres."""
 
-from pydantic import BaseModel, ConfigDict
 from typing import Literal
+from pydantic import field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Parameter(BaseModel):
@@ -22,18 +23,25 @@ class FunctionDefinition(BaseModel):
     """A single callable function like in the functon_definitions."""
 
     model_config = ConfigDict(extra="forbid")
-    name: str
-    description: str
-    parameters: dict[str, Parameter]
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    parameters: dict[str, Parameter] = Field(min_length=1)
     returns: ReturnType
 
 
 class PromptEntry(BaseModel):
-    """A single entry from function-calling_test."""
+    """Define a valid prompt."""
 
     model_config = ConfigDict(extra="forbid")
+    prompt: str = Field(min_length=1)
 
-    prompt: str
+    @field_validator("prompt")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        """Guard for blank strings."""
+        if not v.strip():
+            raise ValueError("prompt must not be blank or whitespace-only")
+        return v
 
 
 class FunctionCallresult(BaseModel):
