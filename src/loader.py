@@ -70,10 +70,8 @@ def build_prompt(
     function_tab = "\n".join(function_lines)
 
     return (
-        "You are a function-calling assistant. Given a user request, "
-        "respond ONLY with a JSON object in the format "
+        "respond ONLY in the format "
         '{"name": "<function_name>", "parameters": {...}}\n\n'
         f"Available functions:\n{function_tab}\n\n"
         f"User request: {prompts}\n"
-        "JSON response:"
     )
