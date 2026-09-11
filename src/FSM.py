@@ -94,8 +94,9 @@ class JSONenforce:
 
     def _generate_string(self, param_name: str) -> None:
         self.tokeniser('"')
-        temporary = []
+        temporary: list[int] = []
         ended = False
+        prev_decoded = ""
 
         for _ in range(self.MAX_STRING_TOKENS):
             logits = self.model.get_logits_from_input_ids(self.input_ids)
@@ -104,15 +105,21 @@ class JSONenforce:
             temporary.append(next_token_id)
             decoded_so_far = self.model.decode(temporary)
 
-            print(f"\r  [{param_name}] generating: \"{decoded_so_far}\"",
-                  end="", flush=True)
+            print(f"\r  [{param_name}] generating: \"{decoded_so_far}\"\x1b[K",
+                end="", flush=True)
+
             if quote_counter(decoded_so_far):
+                new_text = decoded_so_far[len(prev_decoded):]
+                content, _, _ = new_text.partition('"')
                 temporary.pop()
+                if content:
+                    self.tokeniser(content)
                 ended = True
                 break
 
             self.input_ids.append(next_token_id)
             self.res.append(next_token_id)
+            prev_decoded = decoded_so_far
 
         print()
 
