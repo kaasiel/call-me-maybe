@@ -1,6 +1,6 @@
 """This module loads and validates JSON function/prompt definition files."""
 
-from src.model import FunctionDefinition, PromptEntry
+from src import FunctionDefinition, PromptEntry
 from pydantic import TypeAdapter
 import json
 import pydantic
