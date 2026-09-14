@@ -55,7 +55,6 @@ def jsonencode(model: Small_LLM_Model, prompt_text: str,
 @spell_timer
 def main() -> None:
     """Launch all the codes."""
-    model = Small_LLM_Model()
     args = args_parser()
     prompts = prompt_loader(args.input)
     functions = function_loader(args.functions_definitions)
@@ -64,6 +63,7 @@ def main() -> None:
     result = []
     for prompt in prompts:
         try:
+            model = Small_LLM_Model()
             start = perf_counter()
             result_obj = jsonencode(model, prompt.prompt, functions)
             elapsed = perf_counter() - start
@@ -74,7 +74,7 @@ def main() -> None:
             total_time += elapsed
             result.append(data)
 
-        except Exception as e:
+        except (Exception, UnboundLocalError) as e:
             print(f"Error for '{prompt.prompt}': {e}")
             print("\n" + '*' * 10)
 

@@ -1,5 +1,6 @@
 """Finite-state JSON generation helpers for constrained function calls."""
 
+import functools
 import json
 from enum import Enum, auto
 from collections.abc import Iterable
@@ -18,9 +19,25 @@ def filter_logits(
     return filtered
 
 
-def quote_counter(text: str) -> bool:
-    """Return whether an odd number of quote marks has been seen."""
-    return text.count('"') % 2 == 1
+@functools.lru_cache(maxsize=4)
+def _load_control_char_ids(
+        vocab_path: str, control_chars: str) -> frozenset[int]:
+    """Return vocab token ids whose text contains a raw control character.
+
+    Built once per vocab file -- and cached across every JSONenforce
+    instance / prompt -- straight from the vocab file's token strings.
+    Never decodes the ~150k vocabulary entries one at a time.
+    """
+    with open(vocab_path, "r", encoding="utf-8") as vocab_file:
+        vocab: dict[str, int] = json.load(vocab_file)
+
+    blocked: set[int] = set()
+    for token_str, token_id in vocab.items():
+        # Undo common BPE display artefacts before checking the text.
+        cleaned = token_str.replace("\u0120", " ").replace("\u010a", "\n")
+        if any(char in control_chars for char in cleaned):
+            blocked.add(token_id)
+    return frozenset(blocked)
 
 
 class State(Enum):
@@ -37,6 +54,7 @@ class JSONenforce:
     """Enforce JSON parsing for model output."""
 
     DIGIT_CHAR = "0123456789"
+    CONTROL_CHARS = "\n\r\t"
     SIGN_CHAR = "-"
     DECIMAL_CHAR = "."
     A_TERMINATOR = [",", "}"]
@@ -73,6 +91,11 @@ class JSONenforce:
         self._number_allowed_ids = self._char_ids(
             self.DIGIT_CHAR + self.SIGN_CHAR + self.DECIMAL_CHAR
             + terminator_chars
+        )
+        self._sign_ids = self._char_ids(self.SIGN_CHAR)
+        self._decimal_ids = self._char_ids(self.DECIMAL_CHAR)
+        self._control_char_ids = _load_control_char_ids(
+            self.model.get_path_to_vocab_file(), self.CONTROL_CHARS
         )
 
     def _char_ids(self, chars: str) -> set[int]:
@@ -111,51 +134,17 @@ class JSONenforce:
             self.input_ids.append(next_token_id)
             self.res.append(next_token_id)
 
-    def _generate_string(self, param_name: str) -> None:
-        self.tokeniser('"')
-        temporary: list[int] = []
-        ended = False
-        prev_decoded = ""
-
-        for _ in range(self.MAX_STRING_TOKENS):
-            logits = self.model.get_logits_from_input_ids(self.input_ids)
-            next_token_id = max(range(len(logits)), key=lambda i: logits[i])
-
-            temporary.append(next_token_id)
-            decoded_so_far = self.model.decode(temporary)
-
-            print(f"\r  [{param_name}] generating: \"{decoded_so_far}\"\x1b[K",
-                  end="", flush=True)
-
-            if quote_counter(decoded_so_far):
-                new_text = decoded_so_far[len(prev_decoded):]
-                content, _, _ = new_text.partition('"')
-                temporary.pop()
-                if content:
-                    self.tokeniser(content)
-                ended = True
-                break
-
-            self.input_ids.append(next_token_id)
-            self.res.append(next_token_id)
-            prev_decoded = decoded_so_far
-
-        print()
-
-        if not ended:
-            print(
-                f"[warn] string param '{param_name}' "
-                f"truncated at {self.MAX_STRING_TOKENS} tokens"
-            )
-
-        self.tokeniser('"')
-
     def _generate_number(self, param_name: str, allow_decimal: bool) -> None:
-        """Generate a numeric literal."""
-        allowed_ids = (
+        """Generate a numeric literal.
+
+        Refuses a second sign or decimal point once one has been seen.
+        """
+        base_allowed = (
             self._number_allowed_ids if allow_decimal
             else self._integer_allowed_ids
         )
+        seen_decimal = False
+        seen_digit = False
         iters = 0
 
         while True:
@@ -164,8 +153,13 @@ class JSONenforce:
                 raise ValueError(
                     f"Number param '{param_name}' did not terminate")
 
-            logits = self.model.get_logits_from_input_ids(self.input_ids)
+            allowed_ids = set(base_allowed)
+            if seen_digit:
+                allowed_ids -= self._sign_ids
+            if seen_decimal or not allow_decimal:
+                allowed_ids -= self._decimal_ids
 
+            logits = self.model.get_logits_from_input_ids(self.input_ids)
             masked_logits = filter_logits(logits, allowed_ids)
             next_token_id = masked_logits.index(max(masked_logits))
             decoded = self.model.decode([next_token_id])
@@ -177,39 +171,63 @@ class JSONenforce:
 
             print()
 
+            if next_token_id in self._decimal_ids:
+                seen_decimal = True
+            elif next_token_id not in self._sign_ids:
+                seen_digit = True
+
             self.input_ids.append(next_token_id)
             self.res.append(next_token_id)
 
-    def _resolve_param_type(self, param_name: str, param_type: str) -> str:
-        """Normalize a declared type or guessing from the name."""
-        normalized = param_type.strip().lower()
-        if normalized in self._TYPE_ALIASES:
-            return self._TYPE_ALIASES[normalized]
+    def _generate_string(self, param_name: str) -> None:
+        """Generate a JSON string value.
 
-        guess = self._guess_type_from_name(param_name)
-        print(
-            f"[warn] unknown parameter type '{param_type}' for "
-            f"'{param_name}', guessing '{guess}' from its name"
-        )
-        return guess
+        Blocks raw control characters and escapes any backslash or
+        quote the model produces as content.
+        """
+        self.tokeniser('"')
 
-    @staticmethod
-    def _guess_type_from_name(param_name: str) -> str:
-        """Fallback heuristic when a parameter's declared type is unknown."""
-        pname = param_name.lower()
-        bool_hints = ("is_", "has_", "enable", "flag", "active")
-        int_hints = ("count", "num", "size", "index", "id", "age", "year")
-        float_hints = ("rate", "ratio", "price", "amount", "score", "percent")
+        ended = False
+        for _ in range(self.MAX_STRING_TOKENS):
+            logits = self.model.get_logits_from_input_ids(self.input_ids)
+            masked_logits = filter_logits(
+                logits,
+                set(range(len(logits))) - self._control_char_ids,
+            )
+            next_token_id = masked_logits.index(max(masked_logits))
+            token_text = self.model.decode([next_token_id])
 
-        if (
-            pname.startswith(("is", "has"))
-                or any(c in pname for c in bool_hints)):
-            return "boolean"
-        if any(c in pname for c in int_hints):
-            return "integer"
-        if any(c in pname for c in float_hints):
-            return "number"
-        return "string"
+            print(f"\r  [{param_name}] generating: \"{token_text}\"\x1b[K",
+                  end="", flush=True)
+
+            if '"' in token_text:
+                # a bare quote always ends the value; flush whatever came
+                # before it in this token first
+                content, _, _ = token_text.partition('"')
+                if content:
+                    self._emit_escaped(content)
+                ended = True
+                break
+
+            self._emit_escaped(token_text)
+
+        print()
+
+        if not ended:
+            print(
+                f"[warn] string param '{param_name}' "
+                f"truncated at {self.MAX_STRING_TOKENS} tokens"
+            )
+
+        self.tokeniser('"')
+
+    def _emit_escaped(self, text: str) -> None:
+        """Write text to the output, escaping backslashes and quotes.
+
+        Ensures they can never be misread as JSON control sequences.
+        """
+        escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+        self.tokeniser(escaped)
 
     def output_modelisation(self) -> FunctionCallresult:
         """Force the output to be a valid JSON."""
@@ -240,8 +258,7 @@ class JSONenforce:
                 key_text = f'"{param_name}":'
                 self.tokeniser(key_text)
 
-                resolved_type = self._resolve_param_type(
-                    param_name, param.type)
+                resolved_type = param.type
 
                 if resolved_type == "string":
                     self._generate_string(param_name)

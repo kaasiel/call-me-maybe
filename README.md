@@ -75,12 +75,9 @@ output is *always* valid JSON that matches the function's schema exactly.
    (e.g. "we're inside a string value for parameter `a`, which must be a number").
    At each step:
    - the FSM reports the set of allowed next characters,
-   - that set is mapped to the subset of vocabulary token IDs that would keep the
-     output consistent with it (using the vocabulary file returned by
-     `get_path_to_vocab_file`),
    - logits for every other token are set to `-inf`,
    - the highest-scoring token among the remaining candidates is selected.
-4. **Termination** — generation stops once the FSM reaches its `DONE` state (a complete,
+4. **Termination** — generation stops once the FSM reaches its `END` state (a complete,
    valid function-call object), and the result is decoded and validated with pydantic
    before being appended to the output list.
 
@@ -119,7 +116,7 @@ in an invalid token.
   leading/trailing digit rules) to avoid producing syntactically valid but
   semantically wrong values (e.g. `"a": 4.` with a trailing dot).
 
-## Testing Strategy
+<!-- ## Testing Strategy
 
 - Unit tests (via `pytest`) cover the JSON/schema FSM in isolation: valid transitions,
   rejected characters, and full accept/reject traces for representative function
@@ -129,7 +126,7 @@ in an invalid token.
   `function_calling_results.json` for both JSON validity and semantic correctness
   (right function, right arguments, right types).
 - Edge cases specifically exercised: empty/malformed input files, missing files,
-  ambiguous prompts, large numbers, and functions with multiple parameters.
+  ambiguous prompts, large numbers, and functions with multiple parameters. -->
 
 ## Example Usage
 

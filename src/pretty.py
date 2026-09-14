@@ -25,7 +25,6 @@ def normalize_params(
         param_def = schema.get(key)
         if param_def is not None and param_def.type == "number":
             params[key] = float(value)
-        # type == "integer" (or missing/other) -> leave untouched
     return data
 
 
