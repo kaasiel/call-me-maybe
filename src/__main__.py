@@ -57,7 +57,7 @@ def main() -> None:
     """Launch all the codes."""
     args = args_parser()
     prompts = prompt_loader(args.input)
-    functions = function_loader(args.functions_definitions)
+    functions = function_loader(args.functions_definition)
 
     total_time = 0.0
     result = []
