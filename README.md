@@ -22,7 +22,7 @@ correct types — never a direct natural-language answer.
 
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) for dependency management
-- The `llm_sdk` package, placed alongside `src/` (see Submission requirements)
+- The `llm_sdk` package, placed alongside `src/`
 
 ### Installation
 
@@ -200,3 +200,7 @@ Wrote 11 results to data/output/function_calling_results.json
 - **AI usage**: an AI assistant was used to help think through the token-to-character
   mapping strategy for the FSM. the FSM and generation loop implementation itself was written and
   understood by the author, per the subject's AI usage guidelines.
+
+  ## Bonuses
+  -I implememted a better output printing by useing Ansii color and added a live printing to see in reall time what's the llm doing.
+  -The folder test containing pytest tests also a bonus implemented for this project, testing the solidity of the project
