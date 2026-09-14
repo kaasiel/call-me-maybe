@@ -1,0 +1,9 @@
+[
+  {"name": "fn_add", "description": "Add exactly two integers and return their sum.",
+   "parameters": {"a": {"type": "integer"}, "b": {"type": "integer"}}, "returns": {"type": "integer"}},
+  {"name": "fn_add_numbers", "description": "Add two floating point numbers together and return their sum.",
+   "parameters": {"a": {"type": "number"}, "b": {"type": "number"}}, "returns": {"type": "number"}},
+  {"name": "fn_add_numbers_verbose", "description": "Add two numbers and log the operation.",
+   "parameters": {"a": {"type": "number"}, "b": {"type": "number"}, "note": {"type": "string"}},
+   "returns": {"type": "number"}}
+]

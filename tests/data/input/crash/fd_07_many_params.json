@@ -1,0 +1,13 @@
+[
+  {"name": "fn_format_address",
+   "description": "Format a postal address from its individual components.",
+   "parameters": {
+     "street": {"type": "string"},
+     "city": {"type": "string"},
+     "state": {"type": "string"},
+     "zip_code": {"type": "string"},
+     "country": {"type": "string"},
+     "apartment": {"type": "string"}
+   },
+   "returns": {"type": "string"}}
+]

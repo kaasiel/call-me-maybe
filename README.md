@@ -116,7 +116,7 @@ in an invalid token.
   leading/trailing digit rules) to avoid producing syntactically valid but
   semantically wrong values (e.g. `"a": 4.` with a trailing dot).
 
-<!-- ## Testing Strategy
+## Testing Strategy
 
 - Unit tests (via `pytest`) cover the JSON/schema FSM in isolation: valid transitions,
   rejected characters, and full accept/reject traces for representative function
@@ -125,8 +125,49 @@ in an invalid token.
   `functions_definition.json`, followed by manual inspection of
   `function_calling_results.json` for both JSON validity and semantic correctness
   (right function, right arguments, right types).
-- Edge cases specifically exercised: empty/malformed input files, missing files,
-  ambiguous prompts, large numbers, and functions with multiple parameters. -->
+- Two dedicated crash-test suites, covering the loader/CLI layer and the
+  generation/FSM layer separately:
+
+  **Group 1 — loader / CLI layer** (`tests/test_crash_loader.py`, no model
+  required):
+
+  ```bash
+  uv run python3 -m pytest tests/test_crash_loader.py -v
+  ```
+
+  21/21 pass. Covers missing files, malformed JSON, zero-byte / whitespace-only
+  files, a top-level JSON object instead of an array in either input file, empty
+  arrays, functions missing required keys / with extra keys / with unsupported
+  parameter types, and blank / empty / non-string / null prompts.
+
+  This caught one real bug: two function definitions sharing the same `name`
+  both load successfully with no dedup or rejection. `FSM.output_modelisation()`
+  resolves the chosen name via `function_names.index(chosen_name)`, which
+  always returns the *first* match, so a later duplicate becomes permanently
+  unreachable. Not fatal, but worth a `sys.exit`/warning on duplicate names.
+
+  **Group 2 — generation / FSM layer** (`run_group2_crash_tests.sh`, needs the
+  real model):
+
+  ```bash
+  chmod +x run_group2_crash_tests.sh
+  uv run tests/./run_group2_crash_tests.sh
+  ```
+
+  Runs 10 crash-fixture pairs (`fd_NN_*.json` / `tests_NN_*.json`) through the
+  actual CLI, checking exit code and JSON validity. This only confirms the
+  output is well-formed, not semantically correct, so each result is also
+  manually inspected. Fixtures target: embedded quotes/escapes, a 42-digit
+  number (stresses the `MAX_NUMBER_TOKENS` cap), a negative decimal, a
+  ~700-character string (stresses the `MAX_STRING_TOKENS` cap and truncation
+  warning), Unicode/emoji, prompts with no matching function (forced-choice
+  behavior), a 6-parameter function, three functions sharing a name prefix
+  (`fn_add` / `fn_add_numbers` / `fn_add_numbers_verbose`), a boolean parameter,
+  and a minimal one-word prompt.
+
+- Edge cases specifically exercised overall: empty/malformed input files,
+  missing files, ambiguous prompts, large numbers, and functions with multiple
+  parameters.
 
 ## Example Usage
 

@@ -33,7 +33,6 @@ def _load_control_char_ids(
 
     blocked: set[int] = set()
     for token_str, token_id in vocab.items():
-        # Undo common BPE display artefacts before checking the text.
         cleaned = token_str.replace("\u0120", " ").replace("\u010a", "\n")
         if any(char in control_chars for char in cleaned):
             blocked.add(token_id)
@@ -111,7 +110,8 @@ class JSONenforce:
         self.res.extend(ids)
 
     def _walk_fixed_choices(self, choices: list[str]) -> str:
-        choice_ids = [self.model.encode(c).tolist()[0] for c in choices]
+        """Generate and return one of the provided fixed choices."""
+        choice_ids = [self.model.encode(c + '"').tolist()[0] for c in choices]
         chosen: list[int] = []
         while True:
             candidates = [
@@ -122,7 +122,7 @@ class JSONenforce:
             if not candidates:
                 raise ValueError(f"No valid choice among {choices}")
             if len(candidates) == 1:
-                rest = candidates[0][len(chosen):]
+                rest = candidates[0][len(chosen):-1]
                 self.input_ids.extend(rest)
                 self.res.extend(rest)
                 return choices[choice_ids.index(candidates[0])]

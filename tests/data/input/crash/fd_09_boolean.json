@@ -1,0 +1,6 @@
+[
+  {"name": "fn_set_notification_flag",
+   "description": "Enable or disable notifications for a user.",
+   "parameters": {"enabled": {"type": "boolean"}},
+   "returns": {"type": "boolean"}}
+]
