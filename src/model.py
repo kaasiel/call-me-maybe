@@ -15,6 +15,18 @@ class Parameter(BaseModel):
 
     type: Literal["number", "string", "boolean", "integer"]
 
+    @model_validator(mode="before")
+    @classmethod
+    def fix_parameter_type(cls, data: object) -> object:
+        """Force an invalid parameter type to a valid type."""
+        if not isinstance(data, dict):
+            return data
+
+        if data.get("type") not in VALID_TYPES:
+            data["type"] = "string"
+
+        return data
+
 
 class ReturnType(BaseModel):
     """Definition of a function return type."""
