@@ -150,8 +150,7 @@ class JSONenforce:
         while True:
             iters += 1
             if iters > self.MAX_NUMBER_TOKENS:
-                raise ValueError(
-                    f"Number param '{param_name}' did not terminate")
+                break
 
             allowed_ids = set(base_allowed)
             if seen_digit:
@@ -182,12 +181,15 @@ class JSONenforce:
     def _generate_string(self, param_name: str) -> None:
         """Generate a JSON string value.
 
-        Blocks raw control characters and escapes any backslash or
-        quote the model produces as content.
+        Blocks raw control characters. A backslash from the model escapes
+        the character that follows it, so the model can emit a literal
+        backslash or quote as content; only a bare, un-escaped quote ends
+        the value.
         """
         self.tokeniser('"')
 
         ended = False
+        pending_escape = False
         for _ in range(self.MAX_STRING_TOKENS):
             logits = self.model.get_logits_from_input_ids(self.input_ids)
             masked_logits = filter_logits(
@@ -200,16 +202,25 @@ class JSONenforce:
             print(f"\r  [{param_name}] generating: \"{token_text}\"\x1b[K",
                   end="", flush=True)
 
-            if '"' in token_text:
-                # a bare quote always ends the value; flush whatever came
-                # before it in this token first
-                content, _, _ = token_text.partition('"')
-                if content:
-                    self._emit_escaped(content)
+            content = ""
+            found_end = False
+            for ch in token_text:
+                if pending_escape:
+                    content += ch
+                    pending_escape = False
+                elif ch == "\\":
+                    pending_escape = True
+                elif ch == '"':
+                    found_end = True
+                    break
+                else:
+                    content += ch
+
+            if content:
+                self._emit_escaped(content)
+            if found_end:
                 ended = True
                 break
-
-            self._emit_escaped(token_text)
 
         print()
 
