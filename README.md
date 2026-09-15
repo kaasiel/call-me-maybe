@@ -111,7 +111,7 @@ in an invalid token.
 
 ## Challenges Faced
 
-- Mapping FSM-allowed *characters* to a set of allowed *tokens* in order to enhance the accuracy of the result yet, it became more complicated to identify **strings** values and **boleans** in the FunctionCallResults.
+- Mapping FSM-allowed *characters* to a set of allowed *tokens* in order to enhance the accuracy of the result yet, it became more complicated to identify **strings** values and **booleans** in the FunctionCallResults.
 - Numeric literals required extra care in the FSM (distinguishing integers, floats,
   leading/trailing digit rules) to avoid producing syntactically valid but
   semantically wrong values (e.g. `"a": 4.` with a trailing dot).
@@ -137,8 +137,7 @@ in an invalid token.
 
   21/21 pass. Covers missing files, malformed JSON, zero-byte / whitespace-only
   files, a top-level JSON object instead of an array in either input file, empty
-  arrays, functions missing required keys / with extra keys / with unsupported
-  parameter types, and blank / empty / non-string / null prompts.
+  arrays, functions missing required keys / with extra keys / and blank / empty / non-string / null prompts. Convert non valid parameters in to strings
 
   This caught one real bug: two function definitions sharing the same `name`
   both load successfully with no dedup or rejection. `FSM.output_modelisation()`
@@ -200,8 +199,12 @@ Wrote 11 results to data/output/function_calling_results.json
   mapping strategy for the FSM. the FSM and generation loop implementation itself was written and
   understood by the author, per the subject's AI usage guidelines.
 
-  ## Bonuses
-  -I implememted a better output printing by useing *ANSI* color and added a live printing to see in reall time what's the llm doing.
+## Bonuses
+  -I implemented a better output printing by using *ANSI* color and added a live printing to see in real time what's the llm doing.
   -The folder test containing pytest tests also a bonus implemented for this project, testing the solidity of the project
   -I used *Qwen/Qwen2.5-0.5B-Instruct* as secondary model for my second LLm model
+  to ru it you need to do 
+  ```
+  uv run python -m src --bonus
   
+  ```

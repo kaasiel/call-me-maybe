@@ -1,4 +1,4 @@
-"""This module makes the output pretiier and fix the parameter."""
+"""This module makes the output prettier and fixes the parameter."""
 import json
 from typing import Any
 from src import FunctionDefinition

@@ -1,4 +1,4 @@
-"""This lauches all th functons that runs the program."""
+"""Launches all the functions that run the program."""
 import os
 import sys
 import json
@@ -8,6 +8,7 @@ from functools import wraps
 from time import perf_counter
 from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from collections.abc import Callable
+from pydantic import ValidationError
 from src import JSONenforce, header_printer
 from src import function_loader, prompt_loader, FunctionCallresult
 from src import FunctionDefinition, print_pretty, normalize_params
@@ -29,6 +30,13 @@ def args_parser() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         default="data/output/function_calling_results.json",
+    )
+
+    parser.add_argument(
+        "--bonus",
+        action="store_true",
+        help="Use the alternate LLM (Qwen/Qwen2.5-0.5B-Instruct) "
+             "instead of the default model.",
     )
 
     return parser.parse_args()
@@ -62,16 +70,12 @@ def main() -> None:
 
     total_time = 0.0
     result = []
-    is_bonus = input("Activate alternatie llm?")
     try:
-
-        if is_bonus.lower() in ("yes", "oui", "ok"):
+        if args.bonus:
             model = Small_LLM_Model("Qwen/Qwen2.5-0.5B-Instruct")
-        elif is_bonus.lower() in ("no", "non", "false"):
-            model = Small_LLM_Model()
         else:
             model = Small_LLM_Model()
-    except (UnboundLocalError, Exception) as error:
+    except Exception as error:
         print(f"Error loading the llm: {error}")
         sys.exit(1)
 
@@ -87,7 +91,7 @@ def main() -> None:
             total_time += elapsed
             result.append(data)
 
-        except (Exception, UnboundLocalError) as e:
+        except (ValueError, ValidationError, RuntimeError) as e:
             print(f"Error for '{prompt.prompt}': {e}")
             print("\n" + '*' * 10)
 

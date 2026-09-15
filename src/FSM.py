@@ -60,13 +60,6 @@ class JSONenforce:
     MAX_STRING_TOKENS = 200
     MAX_NUMBER_TOKENS = 40
 
-    _TYPE_ALIASES = {
-        "string": "string", "str": "string", "text": "string",
-        "integer": "integer", "int": "integer", "long": "integer",
-        "number": "number", "float": "number", "double": "number",
-        "boolean": "boolean", "bool": "boolean",
-    }
-
     def __init__(self,
                  model: Small_LLM_Model,
                  prompt: str,
@@ -84,13 +77,8 @@ class JSONenforce:
         self.input_ids = self.model.encode(to_send).tolist()[0]
 
         terminator_chars = "".join(self.A_TERMINATOR)
-        self._integer_allowed_ids = self._char_ids(
-            self.DIGIT_CHAR + self.SIGN_CHAR + terminator_chars
-        )
-        self._number_allowed_ids = self._char_ids(
-            self.DIGIT_CHAR + self.SIGN_CHAR + self.DECIMAL_CHAR
-            + terminator_chars
-        )
+        self._digit_ids = self._char_ids(self.DIGIT_CHAR)
+        self._terminator_ids = self._char_ids(terminator_chars)
         self._sign_ids = self._char_ids(self.SIGN_CHAR)
         self._decimal_ids = self._char_ids(self.DECIMAL_CHAR)
         self._control_char_ids = _load_control_char_ids(
@@ -137,12 +125,14 @@ class JSONenforce:
     def _generate_number(self, param_name: str, allow_decimal: bool) -> None:
         """Generate a numeric literal.
 
-        Refuses a second sign or decimal point once one has been seen.
+        A sign is only reachable as the very first character, a decimal
+        point is only reachable once a digit has already been produced
+        (and never for integers), and the terminator only becomes
+        reachable once at least one digit exists, so every
+        intermediate and final string is a syntactically valid JSON
+        number.
         """
-        base_allowed = (
-            self._number_allowed_ids if allow_decimal
-            else self._integer_allowed_ids
-        )
+        seen_sign = False
         seen_decimal = False
         seen_digit = False
         iters = 0
@@ -152,11 +142,13 @@ class JSONenforce:
             if iters > self.MAX_NUMBER_TOKENS:
                 break
 
-            allowed_ids = set(base_allowed)
+            allowed_ids = set(self._digit_ids)
+            if not seen_sign and not seen_digit and not seen_decimal:
+                allowed_ids |= self._sign_ids
+            if allow_decimal and seen_digit and not seen_decimal:
+                allowed_ids |= self._decimal_ids
             if seen_digit:
-                allowed_ids -= self._sign_ids
-            if seen_decimal or not allow_decimal:
-                allowed_ids -= self._decimal_ids
+                allowed_ids |= self._terminator_ids
 
             logits = self.model.get_logits_from_input_ids(self.input_ids)
             masked_logits = filter_logits(logits, allowed_ids)
@@ -165,14 +157,16 @@ class JSONenforce:
 
             print(f"\r  [{param_name}] generating: \"{decoded}\"",
                   end="", flush=True)
-            if decoded in self.A_TERMINATOR:
+            if next_token_id in self._terminator_ids:
                 break
 
             print()
 
-            if next_token_id in self._decimal_ids:
+            if next_token_id in self._sign_ids:
+                seen_sign = True
+            elif next_token_id in self._decimal_ids:
                 seen_decimal = True
-            elif next_token_id not in self._sign_ids:
+            else:
                 seen_digit = True
 
             self.input_ids.append(next_token_id)
