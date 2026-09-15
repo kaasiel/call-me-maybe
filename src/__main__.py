@@ -1,5 +1,6 @@
 """This lauches all th functons that runs the program."""
 import os
+import sys
 import json
 import argparse
 from typing import Any
@@ -61,9 +62,21 @@ def main() -> None:
 
     total_time = 0.0
     result = []
+    is_bonus = input("Activate alternatie llm?")
+    try:
+
+        if is_bonus.lower() in ("yes", "oui", "ok"):
+            model = Small_LLM_Model("openai-community/gpt2")
+        elif is_bonus.lower() in ("no", "non", "false"):
+            model = Small_LLM_Model()
+        else:
+            model = Small_LLM_Model()
+    except (UnboundLocalError, Exception) as error:
+        print(f"Error loading the llm: {error}")
+        sys.exit(1)
+
     for prompt in prompts:
         try:
-            model = Small_LLM_Model()
             start = perf_counter()
             result_obj = jsonencode(model, prompt.prompt, functions)
             elapsed = perf_counter() - start
