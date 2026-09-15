@@ -1,9 +1,0 @@
-[
-  {
-    "prompt": "hi",
-    "name": "fn_greet",
-    "parameters": {
-      "name": "hi"
-    }
-  }
-]

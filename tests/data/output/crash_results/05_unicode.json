@@ -1,9 +1,0 @@
-[
-  {
-    "prompt": "Reverse the string 'h\u00e9llo \u4e16\u754c \ud83c\udf89'",
-    "name": "fn_reverse_string",
-    "parameters": {
-      "s": "h\u00e9llo \u4e16\u754c \ufffd\ud83c\udf89"
-    }
-  }
-]
