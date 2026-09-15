@@ -203,5 +203,5 @@ Wrote 11 results to data/output/function_calling_results.json
   ## Bonuses
   -I implememted a better output printing by useing *ANSI* color and added a live printing to see in reall time what's the llm doing.
   -The folder test containing pytest tests also a bonus implemented for this project, testing the solidity of the project
-  -I used *openai-community/gpt2* as secondary model for my second LLm model
+  -I used *Qwen/Qwen2.5-0.5B-Instruct* as secondary model for my second LLm model
   

@@ -66,7 +66,7 @@ def main() -> None:
     try:
 
         if is_bonus.lower() in ("yes", "oui", "ok"):
-            model = Small_LLM_Model("openai-community/gpt2")
+            model = Small_LLM_Model("Qwen/Qwen2.5-0.5B-Instruct")
         elif is_bonus.lower() in ("no", "non", "false"):
             model = Small_LLM_Model()
         else:
