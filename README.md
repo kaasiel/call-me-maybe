@@ -150,7 +150,6 @@ in an invalid token.
   real model):
 
   ```bash
-  chmod +x run_group2_crash_tests.sh
   uv run tests/./run_group2_crash_tests.sh
   ```
 

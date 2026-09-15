@@ -1,0 +1,9 @@
+[
+  {
+    "prompt": "Reverse the string 'she said \"hi\\there,\" didn't she?'",
+    "name": "fn_reverse_string",
+    "parameters": {
+      "s": "\"she said \"hi\\there,\" didn't she?'"
+    }
+  }
+]

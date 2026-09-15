@@ -160,13 +160,14 @@ def test_function_unknown_extra_key_is_skipped(tmp_path: Path) -> None:
     assert len(result) == 1
 
 
-def test_function_unsupported_param_type_is_skipped(tmp_path: Path) -> None:
-    """Skip functions with unsupported parameter types."""
+def test_unsupported_param_type_is_coerced_to_string(tmp_path: Path) -> None:
+    """Coerce unsupported parameter types to 'string' instead of rejecting."""
     fn = {**VALID_FN, "parameters": {"items": {"type": "array"}}}
     path = _write(tmp_path, "fd.json", [fn, VALID_FN])
     result = function_loader(path)
-    assert len(result) == 1
-    assert result[0].name == "fn_add_numbers"
+    assert len(result) == 2
+    coerced = next(f for f in result if f.parameters.keys() == {"items"})
+    assert coerced.parameters["items"].type == "string"
 
 
 def test_duplicate_function_names_both_load_but_first_wins(

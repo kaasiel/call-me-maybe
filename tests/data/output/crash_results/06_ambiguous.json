@@ -1,0 +1,16 @@
+[
+  {
+    "prompt": "What is the capital of France?",
+    "name": "fn_greet",
+    "parameters": {
+      "name": "user"
+    }
+  },
+  {
+    "prompt": "Tell me a joke",
+    "name": "fn_greet",
+    "parameters": {
+      "name": "user"
+    }
+  }
+]

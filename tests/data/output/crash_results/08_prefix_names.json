@@ -1,0 +1,20 @@
+[
+  {
+    "prompt": "Add the integers 4 and 5",
+    "name": "fn_add_numbers_verbose",
+    "parameters": {
+      "a": 4.0,
+      "b": 5.0,
+      "note": "Add the integers 4 and 5"
+    }
+  },
+  {
+    "prompt": "Add 2.5 and 3.5",
+    "name": "fn_add_numbers_verbose",
+    "parameters": {
+      "a": 2.5,
+      "b": 3.5,
+      "note": "Add 2.5 and 3.5"
+    }
+  }
+]
